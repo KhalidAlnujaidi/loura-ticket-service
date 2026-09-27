@@ -104,6 +104,8 @@ class ClassificationWorker:
             except asyncio.CancelledError:
                 raise
             except Exception:
+                # _process does not raise on purpose; last resort so a loop
+                # can never die and take its queue slot with it.
                 logger.exception("[%s] unexpected error processing %s", name, ticket_id)
             finally:
                 self._queue.task_done()
@@ -112,46 +114,88 @@ class ClassificationWorker:
                 self._refresh_idle()
 
     async def _process(self, ticket_id: str) -> None:
+        """Drive one ticket to a terminal state: classified, failed or gone.
+
+        Every failure is booked against the same attempt budget — model
+        failures and internal ones alike — so a ticket can never strand as
+        `pending` with its queue slot consumed (the old failure mode: any
+        error outside the model-retry path dropped the id on the floor until
+        a restart). The one exception is a store too broken to book against;
+        that leaves the row for the startup recovery scan instead of spinning.
+        """
         while not self._stopping:
-            row = self.db.get_ticket(ticket_id)
-            if row is None or row["status"] != "pending":
-                return
-            if row["attempts"] >= self.settings.max_attempts:
-                self.db.mark_failed(
-                    ticket_id, row["failure_reason"] or "max attempts exhausted"
-                )
-                return
-            prompt = build_user_prompt(row["subject"], row["body"])
-            raw = ""
             try:
-                raw = await asyncio.wait_for(
-                    self.llm.complete(SYSTEM_PROMPT, prompt),
-                    timeout=self.settings.llm_timeout,
-                )
-                classification = validate_classification(raw)
+                terminal = await self._attempt(ticket_id)
             except asyncio.CancelledError:
                 raise
-            except asyncio.TimeoutError:
-                reason = f"llm timeout after {self.settings.llm_timeout}s"
-                logger.warning("ticket %s: %s", ticket_id, reason)
             except Exception as exc:
-                reason = reason_for(exc)
-                logger.warning(
-                    "ticket %s attempt %d failed: %s | raw=%.200s",
-                    ticket_id,
-                    row["attempts"] + 1,
-                    reason,
-                    raw,
-                )
-            else:
-                self.db.mark_classified(ticket_id, classification)
+                terminal = await self._book_internal_failure(ticket_id, exc)
+            if terminal:
                 return
 
+    async def _attempt(self, ticket_id: str) -> bool:
+        """One classification attempt with its bookkeeping. True when terminal."""
+        row = self.db.get_ticket(ticket_id)
+        if row is None or row["status"] != "pending":
+            return True
+        if row["attempts"] >= self.settings.max_attempts:
+            self.db.mark_failed(
+                ticket_id, row["failure_reason"] or "max attempts exhausted"
+            )
+            return True
+        prompt = build_user_prompt(row["subject"], row["body"])
+        raw = ""
+        try:
+            raw = await asyncio.wait_for(
+                self.llm.complete(SYSTEM_PROMPT, prompt),
+                timeout=self.settings.llm_timeout,
+            )
+            classification = validate_classification(raw)
+        except asyncio.CancelledError:
+            raise
+        except asyncio.TimeoutError:
+            reason = f"llm timeout after {self.settings.llm_timeout}s"
+            logger.warning("ticket %s: %s", ticket_id, reason)
+        except Exception as exc:
+            reason = reason_for(exc)
+            logger.warning(
+                "ticket %s attempt %d failed: %s | raw=%.200s",
+                ticket_id,
+                row["attempts"] + 1,
+                reason,
+                raw,
+            )
+        else:
+            self.db.mark_classified(ticket_id, classification)
+            return True
+
+        attempts = self.db.record_failed_attempt(ticket_id, reason)
+        return await self._budget_or_backoff(ticket_id, attempts, reason)
+
+    async def _book_internal_failure(
+        self, ticket_id: str, exc: Exception
+    ) -> bool:
+        """Book an infrastructure failure (store blip, unexpected bug) like any
+        other attempt. Never raises: if the store cannot even book the failure,
+        leave the row pending for startup recovery."""
+        reason = f"internal error: {type(exc).__name__}"
+        logger.exception("ticket %s: %s", ticket_id, reason)
+        try:
             attempts = self.db.record_failed_attempt(ticket_id, reason)
-            if attempts >= self.settings.max_attempts:
-                self.db.mark_failed(ticket_id, reason)
-                return
-            await asyncio.sleep(self._backoff(attempts))
+            return await self._budget_or_backoff(ticket_id, attempts, reason)
+        except Exception:
+            logger.exception("ticket %s: could not book %s", ticket_id, reason)
+            return True
+
+    async def _budget_or_backoff(
+        self, ticket_id: str, attempts: int, reason: str
+    ) -> bool:
+        """Shared tail of a booked failure: exhaust -> failed, else back off."""
+        if attempts >= self.settings.max_attempts:
+            self.db.mark_failed(ticket_id, reason)
+            return True
+        await asyncio.sleep(self._backoff(attempts))
+        return False
 
     def _backoff(self, attempts: int) -> float:
         if self.settings.retry_base_delay <= 0:
