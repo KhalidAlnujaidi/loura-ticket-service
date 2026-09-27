@@ -1,0 +1,246 @@
+{
+  "generated_at": "2026-09-27T14:10:56+0300",
+  "backend": "laya",
+  "model": "convaiinnovations/laya",
+  "git_rev": "441c8b3",
+  "selection": {
+    "only": "real",
+    "synthetic_split": null,
+    "ids": null
+  },
+  "totals": {
+    "n": 10,
+    "errors": 0,
+    "category_ok": 8,
+    "priority_ok": 4,
+    "both_ok": 4,
+    "category_agreement": 0.8,
+    "priority_agreement": 0.4,
+    "both_agreement": 0.4,
+    "latency_ms": {
+      "median": 85.6,
+      "max": 331.8
+    },
+    "by_category": {
+      "billing": {
+        "n": 3,
+        "category_ok": 3,
+        "priority_ok": 1
+      },
+      "account": {
+        "n": 2,
+        "category_ok": 2,
+        "priority_ok": 1
+      },
+      "technical": {
+        "n": 3,
+        "category_ok": 3,
+        "priority_ok": 2
+      },
+      "other": {
+        "n": 2,
+        "category_ok": 0,
+        "priority_ok": 0
+      }
+    },
+    "by_priority": {
+      "medium": {
+        "n": 8,
+        "category_ok": 7,
+        "priority_ok": 4
+      },
+      "high": {
+        "n": 1,
+        "category_ok": 1,
+        "priority_ok": 0
+      },
+      "low": {
+        "n": 1,
+        "category_ok": 0,
+        "priority_ok": 0
+      }
+    }
+  },
+  "per_ticket": [
+    {
+      "id": "t-1001",
+      "origin": "appendix",
+      "split": "real",
+      "gold": {
+        "category": "billing",
+        "priority": "medium"
+      },
+      "pred": {
+        "category": "billing",
+        "priority": "high",
+        "summary": "Charged twice this month: classified as billing with high priority."
+      },
+      "error": null,
+      "category_ok": true,
+      "priority_ok": false,
+      "latency_ms": 331.8
+    },
+    {
+      "id": "t-1002",
+      "origin": "appendix",
+      "split": "real",
+      "gold": {
+        "category": "account",
+        "priority": "medium"
+      },
+      "pred": {
+        "category": "account",
+        "priority": "high",
+        "summary": "Cannot log in after password reset: classified as account with high priority."
+      },
+      "error": null,
+      "category_ok": true,
+      "priority_ok": false,
+      "latency_ms": 54.5
+    },
+    {
+      "id": "t-1003",
+      "origin": "appendix",
+      "split": "real",
+      "gold": {
+        "category": "technical",
+        "priority": "high"
+      },
+      "pred": {
+        "category": "technical",
+        "priority": "medium",
+        "summary": "API returning 500s since this morning: classified as technical with medium priority."
+      },
+      "error": null,
+      "category_ok": true,
+      "priority_ok": false,
+      "latency_ms": 59.8
+    },
+    {
+      "id": "t-1004",
+      "origin": "appendix",
+      "split": "real",
+      "gold": {
+        "category": "account",
+        "priority": "medium"
+      },
+      "pred": {
+        "category": "account",
+        "priority": "medium",
+        "summary": "Change email on account: classified as account with medium priority."
+      },
+      "error": null,
+      "category_ok": true,
+      "priority_ok": true,
+      "latency_ms": 56.5
+    },
+    {
+      "id": "t-1005",
+      "origin": "appendix",
+      "split": "real",
+      "gold": {
+        "category": "billing",
+        "priority": "medium"
+      },
+      "pred": {
+        "category": "billing",
+        "priority": "high",
+        "summary": "URGENT: classified as billing with high priority."
+      },
+      "error": null,
+      "category_ok": true,
+      "priority_ok": false,
+      "latency_ms": 68.8
+    },
+    {
+      "id": "t-1006",
+      "origin": "appendix",
+      "split": "real",
+      "gold": {
+        "category": "other",
+        "priority": "low"
+      },
+      "pred": {
+        "category": "technical",
+        "priority": "medium",
+        "summary": "Feature request: dark mode: classified as technical with medium priority."
+      },
+      "error": null,
+      "category_ok": false,
+      "priority_ok": false,
+      "latency_ms": 69.5
+    },
+    {
+      "id": "t-1007",
+      "origin": "appendix",
+      "split": "real",
+      "gold": {
+        "category": "billing",
+        "priority": "medium"
+      },
+      "pred": {
+        "category": "billing",
+        "priority": "medium",
+        "summary": "Invoice shows wrong company name: classified as billing with medium priority."
+      },
+      "error": null,
+      "category_ok": true,
+      "priority_ok": true,
+      "latency_ms": 85.6
+    },
+    {
+      "id": "t-1008",
+      "origin": "appendix",
+      "split": "real",
+      "gold": {
+        "category": "other",
+        "priority": "medium"
+      },
+      "pred": {
+        "category": "technical",
+        "priority": "low",
+        "summary": "Untitled ticket: classified as technical with low priority."
+      },
+      "error": null,
+      "category_ok": false,
+      "priority_ok": false,
+      "latency_ms": 88.3
+    },
+    {
+      "id": "t-1009",
+      "origin": "appendix",
+      "split": "real",
+      "gold": {
+        "category": "technical",
+        "priority": "medium"
+      },
+      "pred": {
+        "category": "technical",
+        "priority": "medium",
+        "summary": "Data export empty: classified as technical with medium priority."
+      },
+      "error": null,
+      "category_ok": true,
+      "priority_ok": true,
+      "latency_ms": 110.0
+    },
+    {
+      "id": "t-1010",
+      "origin": "appendix",
+      "split": "real",
+      "gold": {
+        "category": "technical",
+        "priority": "medium"
+      },
+      "pred": {
+        "category": "technical",
+        "priority": "medium",
+        "summary": "Re: Re: Re: still broken: classified as technical with medium priority."
+      },
+      "error": null,
+      "category_ok": true,
+      "priority_ok": true,
+      "latency_ms": 122.8
+    }
+  ]
+}

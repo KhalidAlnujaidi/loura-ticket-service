@@ -1,0 +1,110 @@
+{
+  "generated_at": "2026-09-27T14:54:53+0300",
+  "backend": "laya",
+  "model": "convaiinnovations/laya",
+  "git_rev": "441c8b3",
+  "selection": {
+    "only": "real",
+    "synthetic_split": null,
+    "ids": "t-1002,t-1006,t-1009"
+  },
+  "totals": {
+    "n": 3,
+    "errors": 0,
+    "category_ok": 2,
+    "priority_ok": 1,
+    "both_ok": 1,
+    "category_agreement": 0.6667,
+    "priority_agreement": 0.3333,
+    "both_agreement": 0.3333,
+    "latency_ms": {
+      "median": 50.8,
+      "max": 191.7
+    },
+    "by_category": {
+      "account": {
+        "n": 1,
+        "category_ok": 1,
+        "priority_ok": 0
+      },
+      "other": {
+        "n": 1,
+        "category_ok": 0,
+        "priority_ok": 0
+      },
+      "technical": {
+        "n": 1,
+        "category_ok": 1,
+        "priority_ok": 1
+      }
+    },
+    "by_priority": {
+      "medium": {
+        "n": 2,
+        "category_ok": 2,
+        "priority_ok": 1
+      },
+      "low": {
+        "n": 1,
+        "category_ok": 0,
+        "priority_ok": 0
+      }
+    }
+  },
+  "per_ticket": [
+    {
+      "id": "t-1002",
+      "origin": "appendix",
+      "split": "real",
+      "gold": {
+        "category": "account",
+        "priority": "medium"
+      },
+      "pred": {
+        "category": "account",
+        "priority": "high",
+        "summary": "Cannot log in after password reset: classified as account with high priority."
+      },
+      "error": null,
+      "category_ok": true,
+      "priority_ok": false,
+      "latency_ms": 191.7
+    },
+    {
+      "id": "t-1006",
+      "origin": "appendix",
+      "split": "real",
+      "gold": {
+        "category": "other",
+        "priority": "low"
+      },
+      "pred": {
+        "category": "technical",
+        "priority": "medium",
+        "summary": "Feature request: dark mode: classified as technical with medium priority."
+      },
+      "error": null,
+      "category_ok": false,
+      "priority_ok": false,
+      "latency_ms": 48.9
+    },
+    {
+      "id": "t-1009",
+      "origin": "appendix",
+      "split": "real",
+      "gold": {
+        "category": "technical",
+        "priority": "medium"
+      },
+      "pred": {
+        "category": "technical",
+        "priority": "medium",
+        "summary": "Data export empty: classified as technical with medium priority."
+      },
+      "error": null,
+      "category_ok": true,
+      "priority_ok": true,
+      "latency_ms": 50.8
+    }
+  ]
+}

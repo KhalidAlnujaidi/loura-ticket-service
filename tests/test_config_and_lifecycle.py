@@ -67,6 +67,7 @@ def test_defaults_are_unchanged_without_env(monkeypatch):
         "LOURA_LLM_TIMEOUT",
         "LOURA_DB_PATH",
         "LOURA_LLM_BACKEND",
+        "LOURA_LLM_MODEL",
     ):
         monkeypatch.delenv(var, raising=False)
     settings = Settings.from_env()
@@ -75,6 +76,24 @@ def test_defaults_are_unchanged_without_env(monkeypatch):
         3,
         15.0,
     )
+    # The laya backend must keep serving the base checkpoint unless told otherwise.
+    assert settings.laya_model == "convaiinnovations/laya"
+
+
+def test_llm_model_env_selects_the_laya_checkpoint(monkeypatch):
+    """LOURA_LLM_MODEL picks the served laya checkpoint (an HF id or a local dir)."""
+    monkeypatch.setenv("LOURA_LLM_MODEL", "checkpoints/loura-tickets-v1")
+    settings = Settings.from_env()
+    assert settings.laya_model == "checkpoints/loura-tickets-v1"
+    assert settings.llm_model == "checkpoints/loura-tickets-v1"
+
+
+def test_build_llm_wires_the_laya_checkpoint(settings_factory):
+    """build_llm must hand the checkpoint to LayaLLM (construction loads no weights)."""
+    from app.main import build_llm
+
+    llm = build_llm(settings_factory(llm_backend="laya", laya_model="checkpoints/x"))
+    assert getattr(llm, "model_id") == "checkpoints/x"  # LayaLLM carries the checkpoint
 
 
 def test_worker_start_rejects_zero_workers_directly(settings_factory):

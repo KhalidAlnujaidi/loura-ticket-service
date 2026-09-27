@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import Any
 
 
 def _positive_int(raw: str, name: str) -> int:
@@ -39,6 +40,10 @@ def _positive_float(raw: str, name: str) -> float:
 class Settings:
     db_path: str = "tickets.db"
     llm_backend: str = "laya"  # "laya" | "fake"
+    # Checkpoint the laya backend serves: an HF id or a local dir (e.g. a
+    # fine-tuned checkpoint from scripts/finetune_laya.py). LOURA_LLM_MODEL
+    # overrides it, same as it does for the openai backend.
+    laya_model: str = "convaiinnovations/laya"
     max_attempts: int = 3
     worker_count: int = 2
     llm_timeout: float = 15.0
@@ -56,7 +61,7 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
-        kwargs: dict[str, object] = {}
+        kwargs: dict[str, Any] = {}
         if value := os.getenv("LOURA_DB_PATH"):
             kwargs["db_path"] = value
         if value := os.getenv("LOURA_LLM_BACKEND"):
@@ -76,6 +81,9 @@ class Settings:
             kwargs["llm_base_url"] = value
         if value := os.getenv("LOURA_LLM_MODEL"):
             kwargs["llm_model"] = value
+            # Same knob selects the laya checkpoint (an id or a local dir), so a
+            # fine-tuned checkpoint is servable without a code change.
+            kwargs["laya_model"] = value
         if value := os.getenv("LOURA_ADMIN_TOKEN"):
             kwargs["admin_token"] = value
         return cls(**kwargs)
