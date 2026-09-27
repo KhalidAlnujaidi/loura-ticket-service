@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from app.guard import scan
 from app.llm import FakeLLM
 from app.prompts import SYSTEM_PROMPT, build_user_prompt, parse_user_prompt
@@ -129,3 +131,18 @@ async def test_flagged_ticket_still_classifies_and_is_counted(open_app, drain):
         await drain(run)
         metrics = (await client.get("/admin/metrics")).json()
         assert metrics["guard"]["injection_flags"] == 1
+
+
+def test_parse_user_prompt_rejects_non_prompts():
+    """The parser is the Laya adapter's input contract: anything that is not
+    a well-formed build_user_prompt output must raise, not silently degrade
+    to ("", text) and dress garbage up as a ticket."""
+    for bad in (
+        "just some text",
+        "",
+        "<ticket><subject>s</subject>",
+        "<ticket><body>b</body></ticket>",
+        "<ticket><subject>s</subject><body>b</body>",
+    ):
+        with pytest.raises(ValueError):
+            parse_user_prompt(bad)

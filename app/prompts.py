@@ -24,18 +24,23 @@ def build_user_prompt(subject: str, body: str) -> str:
 
 
 def parse_user_prompt(user: str) -> tuple[str, str]:
-    """Inverse of build_user_prompt: recover (subject, body) from the model-facing prompt."""
+    """Inverse of build_user_prompt: recover (subject, body) from the model-facing prompt.
+
+    Raises ValueError on anything that is not a well-formed build_user_prompt
+    output: silently degrading to ("", text) would hand the adapter garbage
+    dressed up as a ticket.
+    """
     start = user.find("<ticket>")
     end = user.rfind("</ticket>")
-    inner = user[start + len("<ticket>") : end] if start != -1 and end != -1 else user
-    subject = ""
-    body = inner
+    if start == -1 or end == -1:
+        raise ValueError("prompt is not wrapped in <ticket> tags")
+    inner = user[start + len("<ticket>") : end]
     s_open, s_close = inner.find("<subject>"), inner.rfind("</subject>")
     b_open, b_close = inner.find("<body>"), inner.rfind("</body>")
-    if s_open != -1 and s_close != -1:
-        subject = html.unescape(inner[s_open + len("<subject>") : s_close]).strip()
-    if b_open != -1 and b_close != -1:
-        body = html.unescape(inner[b_open + len("<body>") : b_close]).strip()
-    else:
-        body = html.unescape(inner).strip()
+    if s_open == -1 or s_close == -1 or s_close < s_open:
+        raise ValueError("prompt is missing <subject> tags")
+    if b_open == -1 or b_close == -1 or b_close < b_open:
+        raise ValueError("prompt is missing <body> tags")
+    subject = html.unescape(inner[s_open + len("<subject>") : s_close]).strip()
+    body = html.unescape(inner[b_open + len("<body>") : b_close]).strip()
     return subject, body
