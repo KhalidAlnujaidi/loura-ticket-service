@@ -3,7 +3,7 @@ from __future__ import annotations
 import itertools
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Callable
+from typing import Any, AsyncIterator
 
 import pytest
 from httpx import ASGITransport, AsyncClient

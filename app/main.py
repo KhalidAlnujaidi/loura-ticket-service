@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from .config import Settings
 from .db import Database
 from .guard import scan as injection_scan
-from .llm import FakeLLM, LLM
+from .llm import LLM, FakeLLM
 from .observability import LogBufferHandler, attach, build_admin_router, detach
 from .schemas import Category, Priority, Status, TicketIn, TicketListOut, TicketOut
 from .worker import ClassificationWorker

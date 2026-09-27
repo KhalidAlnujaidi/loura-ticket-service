@@ -76,7 +76,7 @@ Everything that can go wrong is one retry path: malformed JSON, values
 outside the enums, schema violations, provider exceptions and timeouts all
 count as a failed attempt, and so do internal worker errors — a store blip or
 a bug is booked as `internal error: <Type>` against the same budget, so a
-ticket can never strand `pending` with its queue slot consumed. 3 attempts
+ticket can never be stranded `pending` with its queue slot consumed. 3 attempts
 (`LOURA_MAX_ATTEMPTS`), jittered exponential backoff (base 50 ms, cap 1 s).
 After the third, the ticket becomes `failed` with `failure_reason` set
 (`invalid model output: …`, `llm error: <Type>: …`, `llm timeout after Xs`,
@@ -90,7 +90,8 @@ summary 1–300 chars, `extra="forbid"`).
 **Finish-early pick — re-classification:** `POST /tickets/{id}/reclassify`
 (202) resets `status`/`attempts`/`failure_reason` and requeues, so failed
 tickets — or tickets classified before a prompt change — can be re-run
-deliberately. A ticket that is still `pending` is left untouched (see §7).
+deliberately. A ticket that is still `pending` is left untouched (see the
+exact API shape below).
 
 ### What, if anything, you do about prompt injection
 

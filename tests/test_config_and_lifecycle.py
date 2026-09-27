@@ -9,8 +9,6 @@ Findings covered (see QA_REPORT.md):
 
 from __future__ import annotations
 
-import asyncio
-
 import pytest
 
 from app.config import Settings
