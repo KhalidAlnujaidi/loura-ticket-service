@@ -8,6 +8,8 @@ tickets.db-*
 *.sqlite3
 *.sqlite3-*
 .DS_Store
+# Local training output (hundreds of MB per checkpoint) - never ships
+checkpoints/
 # Internal working notes (design plan / QA scratch) - not part of the deliverable
 .kilo/
 QA_REPORT.md
