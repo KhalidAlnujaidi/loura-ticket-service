@@ -12,7 +12,7 @@ model ([Laya](https://huggingface.co/convaiinnovations/laya)); a scriptable
 python3 -m venv .venv && make install   # core + dev + laya (torch stack)
 make seed                                # loads the 10 appendix tickets (data/sample_tickets.json)
 make run                                 # uvicorn: /ui for users, /admin for ops
-make test                                # 69 passed, 2 skipped (skips need laya / LOURA_LLM_API_KEY)
+make test                                # 67 passed, 2 skipped (skips need laya / LOURA_LLM_API_KEY)
 ```
 
 No API keys, no broker, no Docker. The first `make install` pulls torch
@@ -72,20 +72,25 @@ answer).
 
 ### Retry policy for model failures, and how a ticket ends up failed
 
-Everything the model can do wrong is one retry path: malformed JSON, values
+Everything that can go wrong is one retry path: malformed JSON, values
 outside the enums, schema violations, provider exceptions and timeouts all
-count as a failed attempt. 3 attempts (`LOURA_MAX_ATTEMPTS`), jittered
-exponential backoff (base 50 ms, cap 1 s). After the third, the ticket becomes
-`failed` with `failure_reason` set (`invalid model output: …`, `llm error:
-<Type>: …`, `llm timeout after Xs`) and `classification` stays NULL — raw
-invalid output goes to the admin log tail and is never persisted. Values
-outside the allowed sets can never reach the store as-is (that gate is
-`Classification`: `Literal` enums, summary 1–300 chars, `extra="forbid"`).
+count as a failed attempt, and so do internal worker errors — a store blip or
+a bug is booked as `internal error: <Type>` against the same budget, so a
+ticket can never strand `pending` with its queue slot consumed. 3 attempts
+(`LOURA_MAX_ATTEMPTS`), jittered exponential backoff (base 50 ms, cap 1 s).
+After the third, the ticket becomes `failed` with `failure_reason` set
+(`invalid model output: …`, `llm error: <Type>: …`, `llm timeout after Xs`,
+`internal error: <Type>`) and `classification` stays NULL — raw invalid
+output goes to the admin log tail and is never persisted. The one edge: a
+store too broken to even book the failure leaves the row `pending`, where the
+startup recovery scan re-enqueues it. Values outside the allowed sets can
+never reach the store as-is (that gate is `Classification`: `Literal` enums,
+summary 1–300 chars, `extra="forbid"`).
 
 **Finish-early pick — re-classification:** `POST /tickets/{id}/reclassify`
 (202) resets `status`/`attempts`/`failure_reason` and requeues, so failed
 tickets — or tickets classified before a prompt change — can be re-run
-deliberately.
+deliberately. A ticket that is still `pending` is left untouched (see §7).
 
 ### What, if anything, you do about prompt injection
 
@@ -137,7 +142,7 @@ Single-ticket object (returned by create/get/reclassify, and as list items):
 | `POST /tickets` | `{id?, subject, body}` — `id` 1–100 chars, optional (omitted or null → server mints `t-dd-mm-yy-hh-mm-XX` from the UTC creation minute + 2 random chars, retried on same-minute collision); `subject` ≤ 300; `body` ≤ 20 000; unknown fields rejected | **201** first time; **200** when the id already exists (idempotent: same object back, never re-classified) | **422**; **503** `{error: id_generation_failed}` after 10 colliding mints |
 | `GET /tickets/{id}` | — | **200** ticket object | **404** `{error: not_found}` |
 | `GET /tickets` | query `?category=&priority=&status=&page=&page_size=` (all optional; enum-gated; `page` ≥ 1; `page_size` 1–100, default 20) | **200** `{items: [ticket…], page, page_size, total}` | **422** on bad enum or page bounds |
-| `POST /tickets/{id}/reclassify` | — | **202** reset ticket object (requeued) | **404** |
+| `POST /tickets/{id}/reclassify` | — | **202** reset ticket object (requeued). While the ticket is still `pending` this is a **no-op**: 202 with the row unchanged — it is already on its way, and a reset would zero the attempt bookkeeping under the in-flight run | **404** |
 | `GET /ui` | — | **200** `text/html` (end-user page) | — |
 | `GET /admin` | — | **200** `text/html` (operator dashboard) | — |
 | `GET /admin/metrics` | header `X-Admin-Token` when `LOURA_ADMIN_TOKEN` is set | **200** `{workers: {configured, alive, queue_depth, in_flight, scheduled, idle}, tickets: {pending, classified, failed, total}, llm: {backend, max_attempts}, guard: {detector, injection_flags}, server_time}` | **401** `{error: unauthorized}` |
@@ -157,12 +162,11 @@ the token with `hmac.compare_digest`; with no token configured they are open
 - Real summaries: the Laya path templates `"<subject>: classified as …"`
   (safe — it never quotes untrusted body text — but bland); the optional
   `LOURA_LLM_BACKEND=openai` path writes real prose through the same gate.
-- A real evaluation. The repo sketches one (`data/labelled_tickets.json` — 10
-  hand-labelled tickets; `scripts/eval_agreement.py`; a fine-tune path in
-  `scripts/`), but 10 labels is smoke-scale and synthetic labels are
-  model-agreed. With more time: human-adjudicated labels and held-out numbers.
-- Priority is the weakest field zero-shot (t-1003 should be `high`, returns
-  `medium`); a domain fine-tune is sketched but not validated.
+- A small evaluation (hand-labelled tickets + an agreement script) and a
+  domain fine-tune. An exploratory track was built during development and
+  deliberately cut to keep the submission small; it remains in the repository
+  history. Priority is the field to fix first (t-1003 should be `high`,
+  returns `medium` zero-shot).
 
 ## Weaknesses of this solution
 
@@ -173,8 +177,9 @@ the token with `hmac.compare_digest`; with no token configured they are open
   slim fake-backend mode exists for that reason).
 - **Synchronous SQLite on the event loop**, single-node; queue dedupe is
   in-process, so two processes sharing one DB file could double-process.
-- **Modest zero-shot accuracy on the appendix tickets** against hand-labelled
-  expectations: category 8/10, priority 4/10.
+- **Modest zero-shot accuracy on the 10 appendix tickets** — 8/10 category
+  and 4/10 priority against my hand labels (t-1003 should be `high`, returns
+  `medium`).
 - **Tests pin the deterministic `FakeLLM`**; real-model coverage is one
   skip-if-absent e2e suite, so the heavy backend is less exercised.
 - **No auth or rate limiting** (explicitly out of scope); admin endpoints are
