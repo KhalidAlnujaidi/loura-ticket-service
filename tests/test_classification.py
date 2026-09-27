@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import json
+
+import pytest
+
 from app.db import Database
-from app.llm import FakeLLM
+from app.llm import FakeLLM, ModelOutputError, validate_classification
 
 ALLOWED_CATEGORIES = {"billing", "technical", "account", "other"}
 ALLOWED_PRIORITIES = {"low", "medium", "high"}
@@ -156,3 +160,35 @@ async def test_markdown_fenced_json_is_extracted(open_app, drain):
         assert data["status"] == "classified"
         assert data["classification"]["category"] == "account"
         assert data["attempts"] == 1
+
+
+# ------------------------- pillar 4: schema-edge rejection (validation gate)
+
+
+def test_summary_length_boundary_is_enforced():
+    base = {"category": "billing", "priority": "low"}
+    assert validate_classification(
+        json.dumps({**base, "summary": "x" * 300})
+    ).summary == "x" * 300  # the documented limit itself must pass
+    with pytest.raises(ModelOutputError):
+        validate_classification(json.dumps({**base, "summary": "x" * 301}))
+
+
+def test_model_extra_keys_rejected():
+    raw = json.dumps(
+        {
+            "category": "billing",
+            "priority": "low",
+            "summary": "refund asked",
+            "confidence": 0.99,  # extra=forbid: no unmodeled keys stored
+        }
+    )
+    with pytest.raises(ModelOutputError):
+        validate_classification(raw)
+
+
+@pytest.mark.parametrize("bad", ["", "   "])
+def test_empty_or_whitespace_summary_rejected(bad):
+    raw = json.dumps({"category": "billing", "priority": "low", "summary": bad})
+    with pytest.raises(ModelOutputError):
+        validate_classification(raw)

@@ -137,6 +137,10 @@ def build_admin_router() -> APIRouter:
                 "backend": state.settings.llm_backend,
                 "max_attempts": state.settings.max_attempts,
             },
+            "guard": {
+                "detector": "heuristic",
+                "injection_flags": state.injection_flags,
+            },
             "server_time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }
 

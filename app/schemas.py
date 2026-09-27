@@ -20,7 +20,10 @@ class Classification(BaseModel):
 class TicketIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(min_length=1, max_length=100)
+    # Optional: when omitted, the server mints a readable t-dd-mm-yy-hh-mm-XX
+    # id (UTC) and retries on the rare same-minute collision. Empty string is
+    # still rejected (min_length), so the explicit-id contract is unchanged.
+    id: str | None = Field(default=None, min_length=1, max_length=100)
     subject: str = Field(max_length=300)
     body: str = Field(max_length=20_000)
 

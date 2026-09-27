@@ -76,6 +76,7 @@ td.subj{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowra
     <div class="m"><div class="k">Queue</div><div class="v" id="m-queue">–</div><div class="s" id="m-inflight">–</div></div>
     <div class="m"><div class="k">Workers</div><div class="v" id="m-workers">–</div><div class="s" id="m-idle">–</div></div>
     <div class="m"><div class="k">Model</div><div class="v" id="m-backend" style="font-size:17px">–</div><div class="s" id="m-attempts">–</div></div>
+    <div class="m"><div class="k">Injection flags</div><div class="v" id="m-inject" style="font-size:17px">–</div><div class="s" id="m-guard">–</div></div>
   </div>
 
   <div class="card">
@@ -149,6 +150,8 @@ async function loadMetrics() {
     $("m-idle").textContent = m.workers.idle ? "idle (healthy)" : "busy";
     $("m-backend").textContent = m.llm.backend;
     $("m-attempts").textContent = "max " + m.llm.max_attempts + " attempts";
+    $("m-inject").textContent = m.guard.injection_flags;
+    $("m-guard").textContent = m.guard.detector + " detector";
     $("backendline").textContent = "classifier operations · backend: " + m.llm.backend;
   } catch (e) { /* 401 handled in api() */ }
 }

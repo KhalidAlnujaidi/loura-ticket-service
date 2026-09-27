@@ -133,8 +133,7 @@ $("f").addEventListener("submit", async e => {
   e.preventDefault();
   if (busy) return;
   $("err").textContent = "";
-  const id = "t-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  const payload = {id, subject: $("subject").value, body: $("body").value};
+  const payload = {subject: $("subject").value, body: $("body").value};
   $("go").disabled = true;
   try {
     const r = await fetch("/tickets", {
@@ -149,8 +148,8 @@ $("f").addEventListener("submit", async e => {
         : "HTTP " + r.status;
       return;
     }
-    saveHistory({id: payload.id, subject: payload.subject});
-    await poll(id);
+    saveHistory({id: data.id, subject: data.subject});
+    await poll(data.id);
   } catch (e) {
     $("err").textContent = "Network error: " + e;
   } finally { $("go").disabled = false; }
