@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
 from typing import Any
@@ -31,8 +32,10 @@ def _positive_float(raw: str, name: str) -> float:
         value = float(raw)
     except ValueError as exc:
         raise ValueError(f"{name} must be a number, got {raw!r}") from exc
-    if value <= 0:
-        raise ValueError(f"{name} must be > 0, got {value}")
+    # nan/inf parse as floats and pass a naive <= 0 test: nan would hang
+    # asyncio.wait_for forever, inf would fire instantly. Reject at the edge.
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError(f"{name} must be a finite number > 0, got {raw!r}")
     return value
 
 

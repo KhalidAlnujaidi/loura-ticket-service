@@ -190,3 +190,15 @@ async def test_all_tickets_classified_exactly_once_under_concurrency(open_app, d
         assert worker._queue.qsize() == 0
         assert worker._in_flight == 0
         assert worker._idle.is_set()
+
+@pytest.mark.parametrize("bad", ["nan", "inf", "-inf"])
+def test_non_finite_timeout_is_rejected(bad, monkeypatch):
+    """nan/inf parse as floats and sail past a naive <= 0 check.
+
+    nan then hangs asyncio.wait_for forever; inf fires instantly. Both must
+    die at the env edge with the offending variable named.
+    """
+    monkeypatch.setenv("LOURA_LLM_TIMEOUT", bad)
+    with pytest.raises(ValueError, match="LOURA_LLM_TIMEOUT"):
+        Settings.from_env()
+
