@@ -1,0 +1,246 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Loura ticket classifier — runtime architecture",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "ingest",
+        "label": "Ingest path",
+        "focus": [
+          "client",
+          "api",
+          "db",
+          "queue",
+          "worker"
+        ],
+        "note": "POST /tickets inserts a pending row, then enqueues the id for classification."
+      },
+      {
+        "id": "boundary",
+        "label": "Model boundary",
+        "focus": [
+          "worker",
+          "gate",
+          "laya",
+          "fake"
+        ],
+        "note": "Every backend returns text; only validated output leaves the gate."
+      },
+      {
+        "id": "recovery",
+        "label": "Recovery and results",
+        "focus": [
+          "db",
+          "worker",
+          "api"
+        ],
+        "note": "Pending rows re-run on boot; results are served with filters and pagination."
+      }
+    ]
+  },
+  "layout": {
+    "mode": "grid",
+    "cols": 6,
+    "gapX": 30,
+    "gapY": 48,
+    "cellW": 140,
+    "cellH": 96
+  },
+  "components": [
+    {
+      "id": "client",
+      "type": "external",
+      "label": "HTTP client",
+      "sublabel": "curl · reviewer",
+      "row": 0,
+      "col": 0
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "FastAPI app",
+      "sublabel": "app/main.py",
+      "tag": "4 routes",
+      "row": 0,
+      "col": 1
+    },
+    {
+      "id": "queue",
+      "type": "messagebus",
+      "label": "asyncio.Queue",
+      "sublabel": "in-process · disposable",
+      "row": 0,
+      "col": 2
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "Worker pool",
+      "sublabel": "app/worker.py · 2 loops",
+      "row": 0,
+      "col": 3
+    },
+    {
+      "id": "gate",
+      "type": "backend",
+      "label": "Model boundary",
+      "sublabel": "extract → validate",
+      "row": 0,
+      "col": 4
+    },
+    {
+      "id": "laya",
+      "type": "external",
+      "label": "Laya",
+      "sublabel": "local typed-decision model",
+      "row": 0,
+      "col": 5
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "SQLite",
+      "sublabel": "tickets.db",
+      "row": 1,
+      "col": 1,
+      "tag": "source of truth"
+    },
+    {
+      "id": "fake",
+      "type": "external",
+      "label": "FakeLLM",
+      "sublabel": "tests · slim install",
+      "row": 1,
+      "col": 4
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Loura service — single process, single node",
+      "wraps": [
+        "api",
+        "queue",
+        "worker",
+        "gate",
+        "db",
+        "laya",
+        "fake"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "client-api",
+      "from": "client",
+      "to": "api",
+      "label": "POST /tickets",
+      "variant": "emphasis",
+      "labelAt": [
+        185,
+        154
+      ]
+    },
+    {
+      "id": "api-queue",
+      "from": "api",
+      "to": "queue",
+      "label": "enqueue id",
+      "labelAt": [
+        362,
+        154
+      ]
+    },
+    {
+      "id": "api-db-insert",
+      "from": "api",
+      "to": "db",
+      "label": "insert pending row",
+      "labelAt": [
+        274,
+        154
+      ]
+    },
+    {
+      "id": "queue-worker",
+      "from": "queue",
+      "to": "worker"
+    },
+    {
+      "id": "worker-gate",
+      "from": "worker",
+      "to": "gate",
+      "label": "escaped prompt",
+      "labelAt": [
+        695,
+        154
+      ]
+    },
+    {
+      "id": "gate-laya",
+      "from": "gate",
+      "to": "laya",
+      "label": "complete(system, user) → text",
+      "labelAt": [
+        865,
+        154
+      ]
+    },
+    {
+      "id": "gate-fake",
+      "from": "gate",
+      "to": "fake",
+      "label": "same contract · tests",
+      "labelAt": [
+        780,
+        190
+      ]
+    },
+    {
+      "id": "worker-db-store",
+      "from": "worker",
+      "to": "db",
+      "label": "store classified | failed",
+      "fromSide": "bottom",
+      "toSide": "right",
+      "via": [
+        [
+          610,
+          254
+        ]
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Runtime",
+      "items": [
+        "One uvicorn process: FastAPI plus 2 asyncio worker loops",
+        "SQLite file is the source of truth; the queue is disposable",
+        "Startup re-enqueues every pending row — at-least-once, nothing lost on restart"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Model boundary",
+      "items": [
+        "Every backend returns text through one gate",
+        "Extract JSON → strict Pydantic: Literal enums · summary ≤ 300 · extra=forbid",
+        "Reject → retry (≤ 3 attempts) → failed; raw output logged, never stored"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Serving default",
+      "items": [
+        "Laya — local typed-decision model, no API keys",
+        "FakeLLM — deterministic and scriptable: tests, slim install",
+        "37 tests · clean-clone verified"
+      ]
+    }
+  ]
+}

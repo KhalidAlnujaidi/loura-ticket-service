@@ -46,6 +46,13 @@ class Settings:
     retry_max_delay: float = 1.0
     default_page_size: int = 20
     max_page_size: int = 100
+    # Optional generative backend (LOURA_LLM_BACKEND=openai): key/endpoint/model
+    # come from the environment; defaults keep the zero-key laya path intact.
+    llm_api_key: str | None = None
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_model: str = "gpt-4o-mini"
+    # Optional gate for the admin UI's data endpoints (open when unset).
+    admin_token: str | None = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -63,4 +70,12 @@ class Settings:
             kwargs["worker_count"] = _positive_int(value, "LOURA_WORKERS")
         if value := os.getenv("LOURA_LLM_TIMEOUT"):
             kwargs["llm_timeout"] = _positive_float(value, "LOURA_LLM_TIMEOUT")
+        if value := os.getenv("LOURA_LLM_API_KEY"):
+            kwargs["llm_api_key"] = value
+        if value := os.getenv("LOURA_LLM_BASE_URL"):
+            kwargs["llm_base_url"] = value
+        if value := os.getenv("LOURA_LLM_MODEL"):
+            kwargs["llm_model"] = value
+        if value := os.getenv("LOURA_ADMIN_TOKEN"):
+            kwargs["admin_token"] = value
         return cls(**kwargs)

@@ -74,6 +74,20 @@ class ClassificationWorker:
     async def wait_idle(self, timeout: float | None = None) -> None:
         await asyncio.wait_for(self._idle.wait(), timeout)
 
+    def snapshot(self) -> dict[str, object]:
+        """Point-in-time worker stats for GET /admin/metrics.
+
+        Runs on the event loop like everything else, so plain reads are safe.
+        """
+        return {
+            "configured": self.settings.worker_count,
+            "alive": sum(not task.done() for task in self._tasks),
+            "queue_depth": self._queue.qsize(),
+            "in_flight": self._in_flight,
+            "scheduled": len(self._scheduled),
+            "idle": self._idle.is_set(),
+        }
+
     def _refresh_idle(self) -> None:
         if self._queue.empty() and self._in_flight == 0:
             self._idle.set()

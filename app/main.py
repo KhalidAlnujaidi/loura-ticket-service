@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Query, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from .config import Settings
 from .db import Database
 from .llm import FakeLLM, LLM
+from .observability import LogBufferHandler, attach, build_admin_router, detach
 from .schemas import Category, Priority, Status, TicketIn, TicketListOut, TicketOut
 from .worker import ClassificationWorker
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 def build_llm(settings: Settings) -> LLM:
@@ -19,6 +23,16 @@ def build_llm(settings: Settings) -> LLM:
         from .laya_llm import LayaLLM
 
         return LayaLLM()
+    if settings.llm_backend == "openai":
+        # Optional generative backend; imported lazily so the default
+        # path never needs httpx or an API key (HostedLLM fails fast without one).
+        from .hosted_llm import HostedLLM
+
+        return HostedLLM(
+            api_key=settings.llm_api_key,
+            base_url=settings.llm_base_url,
+            model=settings.llm_model,
+        )
     raise ValueError(f"unknown LOURA_LLM_BACKEND: {settings.llm_backend!r}")
 
 
@@ -39,10 +53,12 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None) -> Fast
     db = Database(settings.db_path)
     llm = llm or build_llm(settings)
     worker = ClassificationWorker(db, llm, settings)
+    log_buffer = LogBufferHandler()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         db.init_schema()
+        attach(log_buffer)
         warmup = getattr(llm, "warmup", None)
         if warmup is not None:
             # Load the checkpoint before accepting work: first boot may
@@ -54,6 +70,7 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None) -> Fast
         finally:
             await worker.stop()
             db.close()
+            detach(log_buffer)
 
     app = FastAPI(
         title="Loura ticket classifier",
@@ -64,6 +81,8 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None) -> Fast
     app.state.db = db
     app.state.llm = llm
     app.state.worker = worker
+    app.state.log_buffer = log_buffer
+    app.include_router(build_admin_router())
 
     @app.post("/tickets", response_model=TicketOut, status_code=201)
     async def create_ticket(payload: TicketIn, response: Response):
@@ -113,6 +132,16 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None) -> Fast
         db.reset_for_reclassify(ticket_id)
         worker.enqueue(ticket_id)
         return db.get_ticket(ticket_id)
+
+    @app.get("/ui", include_in_schema=False)
+    async def ui_page() -> FileResponse:
+        """Minimal end-user page: submit a ticket, watch it classify live."""
+        return FileResponse(STATIC_DIR / "user.html", media_type="text/html")
+
+    @app.get("/admin", include_in_schema=False)
+    async def admin_page() -> FileResponse:
+        """Operator dashboard: metrics, filterable ticket table, live log tail."""
+        return FileResponse(STATIC_DIR / "admin.html", media_type="text/html")
 
     return app
 

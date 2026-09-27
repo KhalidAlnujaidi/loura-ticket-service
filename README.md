@@ -17,6 +17,7 @@ broken/injection modes the brief asks for).
 python3 -m venv .venv && make install   # core + dev + laya (torch stack)
 make seed                                # loads the 10 appendix tickets as pending
 make run                                 # uvicorn (startup warms the checkpoint, re-enqueues pending)
+                                         # then open /ui (users) or /admin (ops: metrics, table, logs)
 make test                                # pytest
 ```
 
@@ -40,12 +41,41 @@ LOURA_LLM_BACKEND=fake make run
 | `GET /tickets/{id}` | **200** / **404** | Includes `status`, `attempts`, `failure_reason`, `classification` (null until classified). |
 | `GET /tickets` | **200** | `?category=&priority=&status=&page=&page_size=` → `{items, page, page_size, total}`. 1-based page, default 20, max 100. Enum params validated → **422**. |
 | `POST /tickets/{id}/reclassify` | **202** / **404** | Bonus pick: resets status/attempts/failure, requeues (re-run failed tickets or tickets classified before a prompt change). |
+| `GET /ui` | **200** | Minimal end-user page: submit a ticket, watch it classify. Excluded from OpenAPI. |
+| `GET /admin` | **200** | Operator dashboard: metrics strip, filterable table, live log tail. Excluded from OpenAPI. |
+| `GET /admin/metrics` | **200** / **401** | Worker/queue snapshot + `GROUP BY status` counts. `401` envelope when `LOURA_ADMIN_TOKEN` is set and `X-Admin-Token` is missing/wrong. |
+| `GET /admin/logs` | **200** / **401** | `?after=<seq>` cursor over the last 500 captured log records (poll-friendly). Same token gate. |
 
 Errors: `404` uses the envelope `{"error": {"code", "message"}}`; `422` keeps
 FastAPI's default `{"detail": ...}` shape (deliberate: no bespoke validation
 stack for a take-home).
 
 Lifecycle: `pending → classified | failed`.
+
+## Interfaces: `/ui` (users) and `/admin` (operators)
+
+Two hand-written single-file pages — vanilla HTML/JS, no build step, no CDN,
+they work offline like the rest of the service:
+
+- **`GET /ui`** — submit subject + body → POSTs `/tickets`, polls
+  `GET /tickets/{id}` every second until the row leaves `pending`, then shows
+  status/category/priority pills, the summary, attempt count and timestamp.
+  A per-browser recent list (`localStorage`) re-opens past tickets. A `failed`
+  card shows `failure_reason` with a **Try again** button (reclassify).
+- **`GET /admin`** — metrics strip from `GET /admin/metrics` (counts by
+  status, queue depth, in-flight/scheduled, alive workers, backend), a
+  filterable + paginated ticket table reusing the public `/tickets` filters
+  with inline **Reclassify** actions, and a live log tail from
+  `GET /admin/logs` (level-colored, pause/clear, 2 s poll).
+
+Admin data endpoints are gated by **`LOURA_ADMIN_TOKEN`** when set
+(`X-Admin-Token` header, `hmac.compare_digest`, `401` with the standard error
+envelope); unset means open, matching the brief's no-auth scope. The `/admin`
+page itself carries no data until those calls succeed, so it always loads.
+Logs come from a bounded in-memory ring buffer (last 500 records) attached to
+the root + uvicorn loggers for the app's lifespan — request lines, worker
+retries and tracebacks included; `?after=` keeps polling cheap. Both UI routes
+are `include_in_schema=False`.
 
 ## Decisions on the deliberately-open questions
 
@@ -126,6 +156,16 @@ responses (timeout), an `asyncio.Event` backpressure gate, call counting, and
 `follow_injection=True` to demonstrate the residual risk of a compliant
 generative model.
 
+**HostedLLM** (optional, `LOURA_LLM_BACKEND=openai`): an OpenAI-compatible
+chat-completions client — `LOURA_LLM_API_KEY` / `LOURA_LLM_BASE_URL` /
+`LOURA_LLM_MODEL` select key, endpoint and model, so OpenAI, OpenRouter, vLLM
+and Ollama's `/v1` all work. Chosen only via env: it fails fast at startup
+without a key (same style as Laya's missing-package error), sets no timeout of
+its own so `LOURA_LLM_TIMEOUT` remains the single deadline for every backend,
+and its output crosses the same strict validation gate — this is the backend
+that actually *writes* the one-sentence summary Laya has to template. `httpx`
+is now a core requirement but imported only on this path.
+
 ## Default classifier: Laya
 
 [`convaiinnovations/laya`](https://huggingface.co/convaiinnovations/laya) is a
@@ -162,6 +202,8 @@ Serving knobs:
 LOURA_LLM_BACKEND=fake make run           # deterministic keyword backend (slim)
 LOURA_LLM_BACKEND=laya LOURA_LLM_TIMEOUT=30 make run   # verbose timeout, e.g. cold disk
 LOURA_WORKERS=1 make run                  # single inference at a time (default lock already serializes)
+LOURA_LLM_BACKEND=openai LOURA_LLM_API_KEY=sk-... make run   # optional generative backend (any OpenAI-compatible endpoint)
+LOURA_ADMIN_TOKEN=change-me make run      # gate GET /admin/metrics + GET /admin/logs
 ```
 
 Numeric overrides are **range-checked when parsed** (`Settings.from_env`):
@@ -179,8 +221,9 @@ End-to-end coverage against the real model: `tests/test_laya_backend.py`
 ## Tests
 
 ```bash
-make install && make test        # 37 passed (includes the real-model e2e)
-make install-slim && make test   # 36 passed + 1 skipped (no laya installed)
+make install && make test        # 47 passed + 1 skipped (real-model e2e runs; hosted e2e skips without a key)
+make install-slim && make test   # 46 passed + 2 skipped (verified: no laya, no key)
+# laya installed AND LOURA_LLM_API_KEY set -> 48 passed, 0 skipped
 ```
 
 The deterministic suites pin `FakeLLM` explicitly in `conftest.py`
@@ -195,6 +238,7 @@ backend end-to-end (warmup → classify → validated store).
 | `test_injection.py` | t-1005 default mode not obeyed; `follow_injection=True` still schema-valid (documented risk) |
 | `test_recovery.py` | pending rows re-enqueued on startup; restart mid-model-call leaves `pending` and re-runs to `classified` |
 | `test_config_and_lifecycle.py` | `LOURA_*` env overrides reject zero/negative/non-numeric values (a bad value must fail at parse time, not degrade silently); valid values and defaults unchanged; `worker.start()` is idempotent and `stop()` cancels every loop; 40 tickets across 8 workers classify exactly once |
+| `test_ui_and_admin.py` | `/ui` + `/admin` serve; log buffer captures records with cursor semantics; metrics reflect workers/tickets; `LOURA_ADMIN_TOKEN` gates admin data (401 envelope) but not the page; `status_counts`; hosted backend: missing-key fail-fast, env wiring, chat payload shape, errors propagate for worker retry, skip-if-no-key live e2e |
 
 ## Layout
 
@@ -209,9 +253,12 @@ app/
   prompts.py     system prompt, XML-escaped <ticket> builder, inverse parser
   llm.py         LLM protocol, JSON extraction + validation, FakeLLM
   laya_llm.py    default Laya backend (warmup + lock, same text contract)
-  worker.py      queue, N loops, retries+backoff, recovery, wait_idle
+  hosted_llm.py  optional OpenAI-compatible backend (LOURA_LLM_BACKEND=openai)
+  observability.py  log ring buffer + GET /admin/{logs,metrics} (token-gated)
+  worker.py      queue, N loops, retries+backoff, recovery, wait_idle, snapshot()
   seed.py        python -m app.seed
-tests/           conftest + 5 suites (+ real-model laya e2e)
+  static/        user.html (/ui) + admin.html (/admin), single-file vanilla JS
+tests/           conftest + 7 files (core suites, laya e2e, UI/admin/hosted)
 ```
 
 ## Weaknesses (honest)
@@ -242,8 +289,8 @@ tests/           conftest + 5 suites (+ real-model laya e2e)
 
 ## Future work / deliberately out of scope
 
-- Real provider client behind the same `LLM` protocol (OpenAI/Anthropic
-  format adapters), with keys from env only (none committed).
+- Anthropic-format / streaming adapters next to the shipped OpenAI-compatible
+  one; hosted keys stay env-only, none committed.
 - Durable broker (SQS/Redis Streams) if workers scale beyond one box.
 - Graceful in-flight drain on shutdown (chose the reclassify bonus instead —
   pick one, per brief).

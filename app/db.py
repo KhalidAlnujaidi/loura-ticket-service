@@ -130,6 +130,19 @@ class Database:
             ).fetchall()
         return [serialize(row) for row in rows], total
 
+    def status_counts(self) -> dict[str, int]:
+        """Counts per status for GET /admin/metrics (always includes total)."""
+        with self._lock:
+            conn = self._connect()
+            rows = conn.execute(
+                "SELECT status, COUNT(*) AS c FROM tickets GROUP BY status"
+            ).fetchall()
+        counts = {"pending": 0, "classified": 0, "failed": 0, "total": 0}
+        for row in rows:
+            counts[row["status"]] = row["c"]
+            counts["total"] += row["c"]
+        return counts
+
     def pending_ids(self) -> list[str]:
         with self._lock:
             conn = self._connect()

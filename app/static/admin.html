@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loura — admin</title>
+<style>
+:root{--bg:#f7f7f8;--card:#fff;--fg:#1a1a1c;--muted:#6b6b73;--line:#e4e4e8;--accent:#3b5bfd;--ok:#0f7b5a;--bad:#c9372c;--warn:#a3620a}
+@media (prefers-color-scheme:dark){:root{--bg:#101013;--card:#18191e;--fg:#ececf0;--muted:#9a9aa4;--line:#2a2b33;--accent:#7d93ff;--ok:#3fbd92;--bad:#ff7a70;--warn:#e0a44a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1150px;margin:0 auto;padding:26px 20px 72px}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:18px}
+h1{font-size:19px;margin:0;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:12.5px;margin:2px 0 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px}
+.m{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.m .k{color:var(--muted);font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.m .v{font-size:24px;font-weight:700;margin-top:2px}
+.m .s{color:var(--muted);font-size:11.5px}
+.v.ok{color:var(--ok)}.v.bad{color:var(--bad)}.v.warn{color:var(--warn)}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+select,button,input{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+button{cursor:pointer;font-weight:600}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.ghost{background:transparent}
+button:disabled{opacity:.5;cursor:default}
+.spacer{flex:1}
+.total{color:var(--muted);font-size:12.5px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;padding:7px 8px;border-bottom:1px solid var(--line)}
+td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.id{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--muted);white-space:nowrap}
+td.subj{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:700;border:1px solid var(--line)}
+.st-classified{color:var(--ok)}.st-failed{color:var(--bad)}.st-pending{color:var(--warn)}
+.cat-billing{color:var(--warn)}.cat-technical{color:var(--bad)}.cat-account{color:var(--accent)}.cat-other{color:var(--muted)}
+.pr-high{color:var(--bad)}.pr-medium{color:var(--warn)}.pr-low{color:var(--ok)}
+.reason{color:var(--bad);font-size:12px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.empty{color:var(--muted);padding:16px 8px;text-align:center}
+.rowbtn{padding:4px 10px;font-size:12px;border-radius:7px;background:transparent;border:1px solid var(--line);color:var(--accent)}
+.logs{max-height:340px;overflow:auto;font-family:ui-monospace,Menlo,monospace;font-size:12px;white-space:pre-wrap;word-break:break-word}
+.logline{padding:3px 6px;border-bottom:1px solid var(--line)}
+.logline .t{color:var(--muted)}
+.logline .lv{font-weight:700;margin:0 6px}
+.lv.WARNING{color:var(--warn)}.lv.ERROR,.lv.CRITICAL{color:var(--bad)}.lv.INFO{color:var(--accent)}.lv.DEBUG{color:var(--muted)}
+.loghead{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.loghead b{font-size:13px}
+#tokbar{display:none;gap:8px;align-items:center;background:var(--card);border:1px solid var(--bad);border-radius:10px;padding:8px 12px;margin-bottom:14px;font-size:13px}
+#tokbar.on{display:flex}
+#tokbar input{flex:1;min-width:160px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Loura — admin</h1>
+      <p class="sub" id="backendline">classifier operations</p>
+    </div>
+    <div class="controls" style="margin:0">
+      <input id="token" type="password" placeholder="X-Admin-Token (if LOURA_ADMIN_TOKEN set)" style="width:250px">
+      <button class="ghost" id="savetoken" type="button">Save token</button>
+      <a href="/ui" style="color:var(--accent);font-size:13px">user page →</a>
+    </div>
+  </header>
+
+  <div id="tokbar"><b>401 — admin token required.</b><input id="token2" type="password" placeholder="X-Admin-Token"><button class="primary" id="tokgo" type="button">Try</button></div>
+
+  <div class="metrics" id="metrics">
+    <div class="m"><div class="k">Pending</div><div class="v warn" id="m-pending">–</div></div>
+    <div class="m"><div class="k">Classified</div><div class="v ok" id="m-classified">–</div></div>
+    <div class="m"><div class="k">Failed</div><div class="v bad" id="m-failed">–</div></div>
+    <div class="m"><div class="k">Queue</div><div class="v" id="m-queue">–</div><div class="s" id="m-inflight">–</div></div>
+    <div class="m"><div class="k">Workers</div><div class="v" id="m-workers">–</div><div class="s" id="m-idle">–</div></div>
+    <div class="m"><div class="k">Model</div><div class="v" id="m-backend" style="font-size:17px">–</div><div class="s" id="m-attempts">–</div></div>
+  </div>
+
+  <div class="card">
+    <div class="controls">
+      <select id="f-status"><option value="">status: any</option><option>pending</option><option>classified</option><option>failed</option></select>
+      <select id="f-category"><option value="">category: any</option><option>billing</option><option>technical</option><option>account</option><option>other</option></select>
+      <select id="f-priority"><option value="">priority: any</option><option>low</option><option>medium</option><option>high</option></select>
+      <span class="spacer"></span>
+      <span class="total" id="total"></span>
+      <button class="ghost" id="prev" type="button">‹</button>
+      <span class="total" id="pagelabel">1</span>
+      <button class="ghost" id="next" type="button">›</button>
+      <button class="ghost" id="refresh" type="button">Refresh</button>
+      <button class="primary" id="auto" type="button">Auto: on</button>
+    </div>
+    <table>
+      <thead><tr><th>id</th><th>subject</th><th>status</th><th>category</th><th>priority</th><th>att</th><th>failure reason</th><th>created (UTC)</th><th></th></tr></thead>
+      <tbody id="rows"><tr><td colspan="9" class="empty">loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="loghead">
+      <b>Live log</b>
+      <span class="total" id="logcount"></span>
+      <span class="spacer"></span>
+      <button class="ghost" id="logpause" type="button">Pause</button>
+      <button class="ghost" id="logclear" type="button">Clear view</button>
+    </div>
+    <div class="logs" id="logs"><div class="empty">waiting for records…</div></div>
+  </div>
+</div>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+let token = localStorage.getItem("loura.admin.token") || "";
+let page = 1, pageSize = 20, total = 0;
+let autoOn = true, logPaused = false, logSeq = 0, logLines = 0;
+$("token").value = token;
+
+function headers(json) {
+  const h = {};
+  if (json) h["content-type"] = "application/json";
+  if (token) h["X-Admin-Token"] = token;
+  return h;
+}
+function show401(on) { $("tokbar").classList.toggle("on", on); }
+
+async function api(url, opts = {}) {
+  opts.headers = {...(opts.headers || {}), ...headers(false)};
+  const r = await fetch(url, opts);
+  if (r.status === 401) { show401(true); throw new Error("401"); }
+  show401(false);
+  return r;
+}
+
+/* ---------- metrics ---------- */
+async function loadMetrics() {
+  try {
+    const r = await api("/admin/metrics");
+    const m = await r.json();
+    $("m-pending").textContent = m.tickets.pending;
+    $("m-classified").textContent = m.tickets.classified;
+    $("m-failed").textContent = m.tickets.failed;
+    $("m-queue").textContent = m.workers.queue_depth;
+    $("m-inflight").textContent = m.workers.in_flight + " in flight, " + m.workers.scheduled + " scheduled";
+    $("m-workers").textContent = m.workers.alive + "/" + m.workers.configured;
+    $("m-idle").textContent = m.workers.idle ? "idle (healthy)" : "busy";
+    $("m-backend").textContent = m.llm.backend;
+    $("m-attempts").textContent = "max " + m.llm.max_attempts + " attempts";
+    $("backendline").textContent = "classifier operations · backend: " + m.llm.backend;
+  } catch (e) { /* 401 handled in api() */ }
+}
+
+/* ---------- ticket table ---------- */
+async function loadTickets() {
+  const q = new URLSearchParams({page, page_size: pageSize});
+  for (const [k, id] of [["status","f-status"],["category","f-category"],["priority","f-priority"]]) {
+    const v = $(id).value; if (v) q.set(k, v);
+  }
+  try {
+    const r = await api("/tickets?" + q);
+    const data = await r.json();
+    total = data.total;
+    $("total").textContent = total + " ticket(s)";
+    $("pagelabel").textContent = data.page + " / " + Math.max(1, Math.ceil(total / pageSize));
+    $("prev").disabled = data.page <= 1;
+    $("next").disabled = data.page * pageSize >= total;
+    if (!data.items.length) {
+      $("rows").innerHTML = '<tr><td colspan="9" class="empty">no tickets match</td></tr>';
+      return;
+    }
+    $("rows").innerHTML = data.items.map(t => {
+      const c = t.classification || {};
+      const act = (t.status === "failed" || t.status === "classified")
+        ? `<button class="rowbtn" data-re="${esc(t.id)}">Reclassify</button>` : "";
+      return `<tr>
+        <td class="id">${esc(t.id)}</td>
+        <td class="subj" title="${esc(t.subject)}">${esc(t.subject) || "<i>(empty)</i>"}</td>
+        <td><span class="pill st-${esc(t.status)}">${esc(t.status)}</span></td>
+        <td>${c.category ? `<span class="pill cat-${esc(c.category)}">${esc(c.category)}</span>` : "—"}</td>
+        <td>${c.priority ? `<span class="pill pr-${esc(c.priority)}">${esc(c.priority)}</span>` : "—"}</td>
+        <td>${t.attempts}</td>
+        <td class="reason" title="${esc(t.failure_reason)}">${esc(t.failure_reason) || ""}</td>
+        <td style="white-space:nowrap;color:var(--muted);font-size:12px">${esc((t.created_at || "").replace("T", " ").slice(0, 19))}</td>
+        <td>${act}</td>
+      </tr>`;
+    }).join("");
+  } catch (e) { /* 401 */ }
+}
+$("rows").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-re]");
+  if (!b) return;
+  b.disabled = true; b.textContent = "…";
+  await fetch("/tickets/" + encodeURIComponent(b.dataset.re) + "/reclassify", {method: "POST", headers: headers(false)});
+  await sleep(1200);
+  loadTickets(); loadMetrics();
+});
+for (const id of ["f-status", "f-category", "f-priority"]) {
+  $(id).addEventListener("change", () => { page = 1; loadTickets(); });
+}
+$("prev").onclick = () => { if (page > 1) { page--; loadTickets(); } };
+$("next").onclick = () => { page++; loadTickets(); };
+$("refresh").onclick = () => { loadTickets(); loadMetrics(); };
+$("auto").onclick = () => { autoOn = !autoOn; $("auto").textContent = "Auto: " + (autoOn ? "on" : "off"); };
+
+/* ---------- logs ---------- */
+async function loadLogs() {
+  if (logPaused) return;
+  try {
+    const r = await api("/admin/logs?after=" + logSeq);
+    const data = await r.json();
+    if (!data.items.length) return;
+    logSeq = data.next;
+    const box = $("logs");
+    if (logLines === 0) box.innerHTML = "";
+    for (const rec of data.items) {
+      const div = document.createElement("div");
+      div.className = "logline";
+      div.innerHTML = `<span class="t">${esc(rec.ts.slice(11, 23))}</span><span class="lv ${esc(rec.level)}">${esc(rec.level)}</span><span class="t">${esc(rec.logger)}:</span> ${esc(rec.text)}`;
+      box.appendChild(div);
+      logLines++;
+    }
+    while (logLines > 400 && box.firstChild) { box.removeChild(box.firstChild); logLines--; }
+    box.scrollTop = box.scrollHeight;
+    $("logcount").textContent = logLines + " line(s) shown";
+  } catch (e) { /* 401 */ }
+}
+$("logpause").onclick = () => { logPaused = !logPaused; $("logpause").textContent = logPaused ? "Resume" : "Pause"; };
+$("logclear").onclick = () => { $("logs").innerHTML = '<div class="empty">view cleared (buffer kept server-side)</div>'; logLines = 0; };
+
+/* ---------- token ---------- */
+$("savetoken").onclick = () => { token = $("token").value.trim(); localStorage.setItem("loura.admin.token", token); refresh(); };
+$("tokgo").onclick = () => { token = $("token2").value.trim(); $("token").value = token; localStorage.setItem("loura.admin.token", token); refresh(); };
+
+function refresh() { loadMetrics(); loadTickets(); loadLogs(); }
+async function loop() {
+  refresh();
+  for (;;) {
+    await sleep(2000);
+    loadLogs();
+    if (autoOn) { loadMetrics(); loadTickets(); }
+  }
+}
+loop();
+</script>
+</body>
+</html>

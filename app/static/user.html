@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loura — classify a ticket</title>
+<style>
+:root{--bg:#f7f7f8;--card:#fff;--fg:#1a1a1c;--muted:#6b6b73;--line:#e4e4e8;--accent:#3b5bfd;--ok:#0f7b5a;--bad:#c9372c;--warn:#a3620a}
+@media (prefers-color-scheme:dark){:root{--bg:#101013;--card:#18191e;--fg:#ececf0;--muted:#9a9aa4;--line:#2a2b33;--accent:#7d93ff;--ok:#3fbd92;--bad:#ff7a70;--warn:#e0a44a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:660px;margin:0 auto;padding:34px 20px 72px}
+h1{font-size:20px;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--muted);margin:0 0 22px;font-size:13.5px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 18px;margin-bottom:14px}
+label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px;font-weight:600}
+input,textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit}
+input:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:transparent}
+textarea{min-height:112px;resize:vertical}
+.btn{margin-top:14px;padding:10px 18px;border:0;border-radius:8px;background:var(--accent);color:#fff;font:inherit;font-weight:600;cursor:pointer}
+.btn:disabled{opacity:.55;cursor:default}
+.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--line);padding:6px 12px;font-size:13px}
+.status{display:flex;gap:10px;align-items:center;font-size:14.5px;font-weight:600}
+.spin{width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+.pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid var(--line);margin-right:6px}
+.cat-billing{color:var(--warn)}.cat-technical{color:var(--bad)}.cat-account{color:var(--accent)}.cat-other{color:var(--muted)}
+.pr-high{color:var(--bad)}.pr-medium{color:var(--warn)}.pr-low{color:var(--ok)}
+.st-classified{color:var(--ok)}.st-failed{color:var(--bad)}.st-pending{color:var(--muted)}
+.summary{margin-top:12px;font-size:15.5px;line-height:1.45}
+.meta{color:var(--muted);font-size:12px;margin-top:10px;word-break:break-all}
+.err{color:var(--bad);font-size:13px;white-space:pre-wrap;margin-top:8px}
+.hist{list-style:none;padding:0;margin:0}
+.hist li{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:13.5px;cursor:pointer}
+.hist li:last-child{border-bottom:0}
+.hist li:hover{color:var(--accent)}
+.hist .hid{color:var(--muted);font-size:12px;flex:none}
+.empty{color:var(--muted);font-size:13.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Loura — classify a ticket</h1>
+  <p class="sub">Send a support ticket to the classifier and watch the result arrive live.</p>
+
+  <form class="card" id="f">
+    <label for="subject">Subject</label>
+    <input id="subject" maxlength="300" placeholder="Charged twice this month" required>
+    <label for="body">Message</label>
+    <textarea id="body" maxlength="20000" placeholder="Describe the problem…" required></textarea>
+    <button class="btn" id="go" type="submit">Classify ticket</button>
+    <div class="err" id="err" role="alert"></div>
+  </form>
+
+  <div class="card" id="result" hidden>
+    <div class="status" id="rstatus"></div>
+    <div id="rdetail"></div>
+  </div>
+
+  <div class="card" id="hcard" hidden>
+    <label style="margin-top:0">Recent (this browser)</label>
+    <ul class="hist" id="hist"></ul>
+  </div>
+</div>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let history = [];
+try { history = JSON.parse(localStorage.getItem("loura.history") || "[]"); } catch (e) {}
+let busy = false;
+
+function saveHistory(entry) {
+  history = [entry, ...history.filter(h => h.id !== entry.id)].slice(0, 8);
+  localStorage.setItem("loura.history", JSON.stringify(history));
+  renderHistory();
+}
+function renderHistory() {
+  $("hcard").hidden = history.length === 0;
+  $("hist").innerHTML = history.map(h =>
+    `<li data-id="${esc(h.id)}"><span>${esc(h.subject || "(no subject)")}</span><span class="hid">${esc(h.id)}</span></li>`
+  ).join("");
+}
+$("hist").addEventListener("click", e => {
+  const li = e.target.closest("li[data-id]");
+  if (li && !busy) poll(li.dataset.id);
+});
+
+function draw(t) {
+  $("result").hidden = false;
+  const st = $("rstatus"), det = $("rdetail");
+  if (t.status === "pending") {
+    st.innerHTML = `<span class="spin"></span><span>Classifying… (attempt ${t.attempts})</span>`;
+    det.innerHTML = "";
+  } else if (t.status === "classified") {
+    const c = t.classification;
+    st.innerHTML = `<span class="pill st-classified">classified</span>` +
+      `<span class="pill cat-${esc(c.category)}">${esc(c.category)}</span>` +
+      `<span class="pill pr-${esc(c.priority)}">${esc(c.priority)}</span>`;
+    det.innerHTML = `<div class="summary">${esc(c.summary)}</div>` +
+      `<div class="meta">${esc(t.id)} · attempt ${t.attempts} · ${esc(t.classified_at || "")}</div>`;
+  } else {
+    st.innerHTML = `<span class="pill st-failed">failed</span><span style="color:var(--bad)">The model could not be reached or answered invalidly.</span>`;
+    det.innerHTML = `<div class="err">${esc(t.failure_reason || "unknown reason")}</div>` +
+      `<div class="meta">${esc(t.id)} · ${t.attempts} attempt(s)</div>` +
+      `<button class="btn ghost" id="rerun" type="button">Try again</button>`;
+    $("rerun").onclick = async () => {
+      await fetch("/tickets/" + encodeURIComponent(t.id) + "/reclassify", {method: "POST"});
+      poll(t.id);
+    };
+  }
+}
+
+async function poll(id) {
+  busy = true; $("go").disabled = true;
+  try {
+    for (let i = 0; i < 180; i++) {           // ~3 min ceiling
+      const r = await fetch("/tickets/" + encodeURIComponent(id));
+      if (!r.ok) { $("err").textContent = "Ticket not found (" + r.status + ")"; return; }
+      const t = await r.json();
+      draw(t);
+      if (t.status !== "pending") {
+        saveHistory({id: t.id, subject: t.subject});
+        return;
+      }
+      await sleep(1000);
+    }
+  } finally { busy = false; $("go").disabled = false; }
+}
+
+$("f").addEventListener("submit", async e => {
+  e.preventDefault();
+  if (busy) return;
+  $("err").textContent = "";
+  const id = "t-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const payload = {id, subject: $("subject").value, body: $("body").value};
+  $("go").disabled = true;
+  try {
+    const r = await fetch("/tickets", {
+      method: "POST",
+      headers: {"content-type": "application/json"},
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (r.status !== 201 && r.status !== 200) {
+      $("err").textContent = Array.isArray(data.detail)
+        ? data.detail.map(d => (d.loc || []).slice(1).join(".") + ": " + d.msg).join("\n")
+        : "HTTP " + r.status;
+      return;
+    }
+    saveHistory({id: payload.id, subject: payload.subject});
+    await poll(id);
+  } catch (e) {
+    $("err").textContent = "Network error: " + e;
+  } finally { $("go").disabled = false; }
+});
+renderHistory();
+</script>
+</body>
+</html>
