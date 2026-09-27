@@ -28,7 +28,7 @@ def build_llm(settings: Settings) -> LLM:
     if settings.llm_backend == "laya":
         from .laya_llm import LayaLLM
 
-        return LayaLLM()
+        return LayaLLM(model_id=settings.laya_model)
     if settings.llm_backend == "openai":
         # Optional generative backend; imported lazily so the default
         # path never needs httpx or an API key (HostedLLM fails fast without one).
