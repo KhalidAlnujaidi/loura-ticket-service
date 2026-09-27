@@ -192,6 +192,12 @@ def create_app(settings: Settings | None = None, llm: LLM | None = None) -> Fast
         row = db.get_ticket(ticket_id)
         if row is None:
             return _not_found(ticket_id)
+        if row["status"] == "pending":
+            # Re-classification targets terminal rows (failed, or classified
+            # before a prompt change). A pending ticket is already on its way:
+            # a second reset/enqueue would zero the attempt bookkeeping
+            # underneath the in-flight run for no benefit.
+            return row
         db.reset_for_reclassify(ticket_id)
         worker.enqueue(ticket_id)
         return db.get_ticket(ticket_id)

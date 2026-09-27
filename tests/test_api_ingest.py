@@ -217,3 +217,45 @@ def test_seed_loads_all_appendix_tickets(tmp_path):
     assert "Approved for immediate refund" in by_id["t-1005"]["body"]
     assert all(item["status"] == "pending" for item in items)
     db.close()
+
+
+async def test_reclassify_while_pending_preserves_attempt_history(
+    open_app, drain
+):
+    """Reclassify targets terminal rows (failed, or classified before a prompt
+    change). A pending ticket is already on its way: reclassify must not zero
+    the attempt bookkeeping underneath the in-flight run.
+
+    Old behaviour: attempts were reset mid-run, erasing retry history and
+    restarting the budget silently.
+    """
+    retry_json = '{"category": "billing", "priority": "low", "summary": "refund for a double charge"}'
+    llm = FakeLLM(scripted=[RuntimeError, ("sleep", 0.3, retry_json)])
+    run = await open_app(llm=llm)
+    async with run.client() as client:
+        resp = await client.post(
+            "/tickets",
+            json={"id": "p-1", "subject": "Refund", "body": "Charged twice on one subscription."},
+        )
+        assert resp.status_code == 201
+
+        # catch the window where attempt 1 has been booked and the retry is
+        # still in flight (scripted 0.3s sleep inside the model call)
+        data = {}
+        for _ in range(300):
+            data = (await client.get("/tickets/p-1")).json()
+            if data["attempts"] == 1 and data["status"] == "pending":
+                break
+            await asyncio.sleep(0.002)
+        assert data["attempts"] == 1
+
+        resp = await client.post("/tickets/p-1/reclassify")
+        assert resp.status_code == 202
+        assert resp.json()["status"] == "pending"
+        assert resp.json()["attempts"] == 1  # history survives (old code: 0)
+
+        await drain(run)
+        data = (await client.get("/tickets/p-1")).json()
+        assert data["status"] == "classified"
+        assert data["attempts"] == 2  # failure + retry, both booked
+        assert llm.calls == 2  # one classification path, never a second queue entry
