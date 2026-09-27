@@ -8,8 +8,6 @@ tickets.db-*
 *.sqlite3
 *.sqlite3-*
 .DS_Store
-# Fine-tuned checkpoints (~800MB each) stay local; reports/ is the evidence and ships.
-checkpoints/
 # Internal working notes (design plan / QA scratch) - not part of the deliverable
 .kilo/
 QA_REPORT.md

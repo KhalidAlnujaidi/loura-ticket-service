@@ -43,9 +43,8 @@ def _positive_float(raw: str, name: str) -> float:
 class Settings:
     db_path: str = "tickets.db"
     llm_backend: str = "laya"  # "laya" | "fake"
-    # Checkpoint the laya backend serves: an HF id or a local dir (e.g. a
-    # fine-tuned checkpoint from scripts/finetune_laya.py). LOURA_LLM_MODEL
-    # overrides it, same as it does for the openai backend.
+    # Checkpoint the laya backend serves: an HF id or a local dir.
+    # LOURA_LLM_MODEL overrides it, same as it does for the openai backend.
     laya_model: str = "convaiinnovations/laya"
     max_attempts: int = 3
     worker_count: int = 2
